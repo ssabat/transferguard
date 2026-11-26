@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest a focused improvement to the simulator.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the user need rather than starting with an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed improvement
+      description: Explain how the idea fits an educational simulator that does not move real money.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: What would success look like?
+      description: Describe observable behavior or a concrete example using fictional data.
