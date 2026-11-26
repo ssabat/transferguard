@@ -1,0 +1,99 @@
+# Transfer Guard — run locally
+
+Transfer Guard is a full-stack wire-transfer **simulator**. It does not connect to a bank or move money. Use fictional details in both modes. The sample rules aren’t a live sanctions list.
+
+## 1. Start in Demo mode (no AWS required)
+
+**Prerequisite:** [Bun](https://bun.sh/docs/installation) 1.3.14 or newer. Open a terminal in the extracted `transfer-guard` directory, where `package.json` and `bun.lock` live.
+
+```sh
+bun install --frozen-lockfile
+cp .env.template .env
+bun run db:migrate
+bun run dev
+```
+
+On Windows PowerShell, use `Copy-Item .env.template .env` in place of `cp`. Skip the copy if you already have a configured `.env`. The included database URL is relative to `packages/web`, where both the migration and dev commands run; it creates `transfer-guard.db` at the project root. For an existing Turso database, set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` in `.env` before migrating.
+
+Open **http://localhost:4200**. The app starts in **Demo mode** with no cloud account or API key. Select a suggested request (it fills the input), then click Send or press Enter. The **Audit log** shows the reason for each decision; click an entry to expand it.
+
+| Try this in chat | Expected result |
+| --- | --- |
+| `Send $5,000 to Alice in Canada` | Approved in the simulator; a `SIM-` reference appears |
+| `Send $10,000 to Alice in CAN` | Approved at the exact inclusive limit |
+| `Send $10,000.01 to Bob in Germany` | Blocked: amount over limit |
+| `Send $750 to Alex in Somalia` | Blocked: restricted destination |
+| `Send $500 to Jo in Atlantis` | Blocked: unverified destination |
+
+Chat and audit records survive page reloads in the current tab. **New session** starts a separate audit trail, not a deletion of stored rows.
+
+## 2. Enable AWS Bedrock mode (optional)
+
+You need an AWS account, a Bedrock agent in a supported region, access to the model selected for that agent, and permission to invoke the agent alias. AWS may charge for live calls.
+
+1. In the AWS console, create or open an **Amazon Bedrock Agent**. Add an action group named `TransferCompliance`. Choose **Define with function details** and **Return control** for execution. Do not attach a Lambda or bank/payment integration.
+2. Create the following function with **required string** parameters. Names are case-sensitive:
+
+   | Function | Parameter | Purpose |
+   | --- | --- | --- |
+   | `evaluate_transfer` | `amount` | USD amount as text (e.g. `5000.00`) |
+   | | `destination_country` | Country name or ISO alpha-2/alpha-3 code |
+   | | `recipient` | Fictional recipient name |
+
+   Suggested agent instruction: “You assist with simulated wire-transfer policy checks. Ask for any missing amount, recipient, or destination. When all three are present, call `evaluate_transfer` in `TransferCompliance`. Report the server's result without changing it. Never claim that real funds moved.”
+3. **Prepare** the agent and create or update a **deployed alias** that points to the version with this action group. Copy the agent ID and alias ID (not their names). The Python `setup_agent` file supplied with the original samples duplicates the sample backend; it does not deploy an agent.
+4. Give the app's server an AWS identity via the SDK's default credential chain. Use a runtime IAM role on AWS or an authorized AWS CLI profile locally. Grant `bedrock:InvokeAgent` on `arn:aws:bedrock:<region>:<account-id>:agent-alias/<agent-id>/<alias-id>` (adjust the ARN partition if applicable). This caller permission is separate from the agent service role used by Bedrock. With IAM Identity Center, for example:
+
+   ```sh
+   aws sso login --profile transfer-guard
+   export AWS_PROFILE=transfer-guard
+   ```
+
+   PowerShell: `$env:AWS_PROFILE = 'transfer-guard'`. Start Bun from that same terminal. Never paste AWS credentials into the app UI.
+5. In the root `.env`, keep the database settings and set the four Bedrock values:
+
+   ```dotenv
+   AWS_REGION=us-east-1
+   BEDROCK_AGENT_ID=<your-agent-id>
+   BEDROCK_AGENT_ALIAS_ID=<your-agent-alias-id>
+   BEDROCK_SANDBOX_KEY=<your-private-key-at-least-24-characters-long>
+   ```
+
+   Use the agent's actual region, replace each angle-bracket placeholder, and generate the private sandbox key in your terminal with `bun -e 'console.log(crypto.randomUUID() + crypto.randomUUID())'`. This key is for entering Bedrock mode in the app; it is **not** an AWS access key. Never prefix these settings with `VITE_` or share the `.env` file.
+6. Restart `bun run dev`. Open the **Demo mode** menu, enter your private **Bedrock access key**, and select **Use Bedrock**. Send `Send $750 to Alex in Somalia`. A successful integration records a **Blocked** audit entry with **AWS Bedrock** as its source. Both modes enforce the same server-side rules. To switch back, open the mode menu and choose **Demo mode**. Reloading resets mode to Demo; the Bedrock key is not stored in the browser.
+
+### If Bedrock isn’t working
+
+- **Not configured on this server:** Check the root `.env`, agent ID, alias ID and key length; restart Bun. This availability label checks configuration, not AWS connectivity.
+- **Access key is incorrect:** Re-enter the app's `BEDROCK_SANDBOX_KEY`, not an IAM credential.
+- **Bedrock could not complete this request:** Check the AWS region, caller's AWS login and alias permissions, agent/model configuration, and that the alias points to an enabled action group using Return Control.
+- **No server-side policy decision recorded:** Provide all three details and check that the agent actually calls `TransferCompliance.evaluate_transfer`. The app does not treat a model's free-text reply as a policy decision.
+
+The Return of Control flow is covered by mocked tests. Live AWS connectivity must be verified with your own agent and credentials. See the AWS references for [Return Control](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-returncontrol.html) and [InvokeAgent](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
+
+## Build and verify
+
+From the project root:
+
+```sh
+bun run build
+bun test packages/web/tests
+```
+
+To serve the built web app after building and migrating, run these from the root:
+
+```sh
+cd packages/web
+bun --env-file=../../.env src/server.ts
+```
+
+Open http://localhost:3000 and check http://localhost:3000/api/health for `{"status":"ok"}`. For a hosted Runable app, use **Publish** in the Runable UI. This source tree includes the fix for the production `./langs/br.json` boot error.
+
+## What's included
+
+- `packages/web`: UI, Hono/oRPC API, deterministic policy engine, Bedrock adapter, Drizzle schema and SQL migrations, tests, and public assets.
+- `packages/mobile` and `packages/desktop`: managed workspace scaffolds, retained for the monorepo. The supported simulator is the web app.
+- `.env.template`, `bun.lock`, and project configuration for a clean install.
+- `reference-samples/`: the original Python attachments, for reference only; not needed to run the web app.
+
+The archive excludes credentials, databases, dependency folders, caches, and generated build output.
