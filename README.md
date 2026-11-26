@@ -2,7 +2,7 @@
 
 **Explainable wire-transfer policy checks, without moving real money.**
 
-[![CI](https://github.com/ssabat/transferguard/actions/workflows/ci.yml/badge.svg)](https://github.com/ssabat/transferguard/actions/workflows/ci.yml)
+[![CI](https://github.com/ssabat/transferguard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ssabat/transferguard/actions/workflows/ci.yml)
 [![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-black)](https://bun.sh)
 [![Language: TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6)](https://www.typescriptlang.org)
 
@@ -20,11 +20,13 @@ Transfer Guard is a full-stack wire-transfer **simulator**. It does not connect 
 
 ## Contents
 
-[Quick start](#quick-start) · [AWS Bedrock](#aws-bedrock-optional) · [Development](#development) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
+[Quick start](#quick-start) · [AWS Bedrock](#aws-bedrock-optional) · [Development](#development) · [Troubleshooting](#troubleshooting) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
 
 ## Quick start
 
 **Prerequisites:** Git and [Bun](https://bun.sh/docs/installation) 1.3.14 or newer. CI uses the pinned package-manager version in `package.json`.
+
+**macOS / Linux**
 
 ```sh
 git clone https://github.com/ssabat/transferguard.git
@@ -35,7 +37,18 @@ bun run db:migrate
 bun run dev
 ```
 
-On Windows PowerShell, use `Copy-Item .env.template .env` in place of `cp`. Skip the copy if you already have a configured `.env`. The included database URL is relative to `packages/web`, where both the migration and dev commands run; it creates `transfer-guard.db` at the project root. For an existing Turso database, set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` in `.env` before migrating.
+**Windows PowerShell**
+
+```powershell
+git clone https://github.com/ssabat/transferguard.git
+Set-Location transferguard
+bun install --frozen-lockfile
+Copy-Item .env.template .env
+bun run db:migrate
+bun run dev
+```
+
+If you already have a clone, start from its project root and skip the clone and directory-change commands. Skip the environment-file copy if you already have a configured `.env`. The included database URL is relative to `packages/web`, where both the migration and dev commands run; it creates `transfer-guard.db` at the project root. For an existing Turso database, set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` in `.env` before migrating.
 
 Open **http://localhost:4200**. The app starts in **Demo mode** with no cloud account or API key. Select a suggested request (it fills the input), then click Send or press Enter. The **Audit log** shows the reason for each decision; click an entry to expand it.
 
@@ -115,7 +128,20 @@ cd packages/web
 bun --env-file=../../.env src/server.ts
 ```
 
-Open http://localhost:3000 and check http://localhost:3000/api/health for `{"status":"ok"}`. For a hosted Runable app, use **Publish** in the Runable UI.
+PowerShell: use `Set-Location packages\web` for the directory change. Open http://localhost:3000 and check http://localhost:3000/api/health for `{"status":"ok"}`. Set the server's `PORT` environment variable if you need a different production port. For a hosted Runable app, use **Publish** in the Runable UI.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `bun` is not recognized | Install a supported Bun binary for your OS, restart the terminal, and confirm `bun --version`. CI runs on Ubuntu; unsupported local systems may need a compatible Linux environment. |
+| Missing database configuration | Create `.env` at the project root from `.env.template`, preserve any existing credentials, and restart the dev server. |
+| Missing tables or first-request database errors | Run `bun run db:migrate` from the root using the same `.env` as the app. |
+| Port 4200 is already in use | Stop the specific process you started on that port, or use a separate environment. The managed development port is fixed; do not edit `__ports.cjs`. |
+| Production server says build output was not found | Run `bun run --filter @template/web build` from the root before starting the production server. |
+| AWS Bedrock requests fail | Follow [the Bedrock troubleshooting guide](#if-bedrock-isnt-working); Demo mode does not require AWS. |
+
+If the problem persists, open a [bug report](https://github.com/ssabat/transferguard/issues/new/choose) with your OS, Bun version, reproduction steps, and redacted logs.
 
 ## Architecture
 
