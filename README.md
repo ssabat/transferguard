@@ -1,12 +1,34 @@
-# Transfer Guard — run locally
+# Transfer Guard
+
+**Explainable wire-transfer policy checks, without moving real money.**
+
+[![CI](https://github.com/ssabat/transferguard/actions/workflows/ci.yml/badge.svg)](https://github.com/ssabat/transferguard/actions/workflows/ci.yml)
+[![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-black)](https://bun.sh)
+[![Language: TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6)](https://www.typescriptlang.org)
 
 Transfer Guard is a full-stack wire-transfer **simulator**. It does not connect to a bank or move money. Use fictional details in both modes. The sample rules aren’t a live sanctions list.
 
-## 1. Start in Demo mode (no AWS required)
+> **Scope:** An educational prototype, not banking software, legal advice, or a production compliance service. The web app is supported; mobile and desktop workspaces are scaffolds.
 
-**Prerequisite:** [Bun](https://bun.sh/docs/installation) 1.3.14 or newer. Open a terminal in the extracted `transfer-guard` directory, where `package.json` and `bun.lock` live.
+## Highlights
+
+- **No-account demo:** Try fictional transfers without AWS credentials or an API key.
+- **Deterministic decisions:** Server-side checks enforce the inclusive $10,000 sample limit, validate amounts and recipients, and normalize destination countries.
+- **Explainable audit trail:** Inspect each decision, its reason, and whether it came from Demo or AWS Bedrock mode.
+- **Optional agent integration:** AWS Bedrock Return Control uses the same policy engine; model prose cannot override a server-side decision.
+- **Persistent sessions:** Chat and audit records are stored through Drizzle with local SQLite or Turso.
+
+## Contents
+
+[Quick start](#quick-start) · [AWS Bedrock](#aws-bedrock-optional) · [Development](#development) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
+
+## Quick start
+
+**Prerequisites:** Git and [Bun](https://bun.sh/docs/installation) 1.3.14 or newer. CI uses the pinned package-manager version in `package.json`.
 
 ```sh
+git clone https://github.com/ssabat/transferguard.git
+cd transferguard
 bun install --frozen-lockfile
 cp .env.template .env
 bun run db:migrate
@@ -27,7 +49,7 @@ Open **http://localhost:4200**. The app starts in **Demo mode** with no cloud ac
 
 Chat and audit records survive page reloads in the current tab. **New session** starts a separate audit trail, not a deletion of stored rows.
 
-## 2. Enable AWS Bedrock mode (optional)
+## AWS Bedrock (optional)
 
 You need an AWS account, a Bedrock agent in a supported region, access to the model selected for that agent, and permission to invoke the agent alias. AWS may charge for live calls.
 
@@ -71,14 +93,20 @@ You need an AWS account, a Bedrock agent in a supported region, access to the mo
 
 The Return of Control flow is covered by mocked tests. Live AWS connectivity must be verified with your own agent and credentials. See the AWS references for [Return Control](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-returncontrol.html) and [InvokeAgent](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
 
-## Build and verify
+## Development
 
-From the project root:
+From the project root, run the supported web app's checks:
 
 ```sh
-bun run build
 bun test packages/web/tests
+bun run --filter @template/web build
 ```
+
+The web build runs the workspace's existing TypeScript check and Vite production build. CI runs these same commands on pull requests and pushes to `main`, without AWS credentials. Bedrock tests use a mocked runtime; they do not verify a live AWS deployment.
+
+`bun run lint` runs the repository's managed Runable checks in a POSIX shell. `bun run build` builds all workspaces, including the desktop and mobile scaffolds.
+
+### Serve a production build
 
 To serve the built web app after building and migrating, run these from the root:
 
@@ -87,13 +115,31 @@ cd packages/web
 bun --env-file=../../.env src/server.ts
 ```
 
-Open http://localhost:3000 and check http://localhost:3000/api/health for `{"status":"ok"}`. For a hosted Runable app, use **Publish** in the Runable UI. This source tree includes the fix for the production `./langs/br.json` boot error.
+Open http://localhost:3000 and check http://localhost:3000/api/health for `{"status":"ok"}`. For a hosted Runable app, use **Publish** in the Runable UI.
 
-## What's included
+## Architecture
 
-- `packages/web`: UI, Hono/oRPC API, deterministic policy engine, Bedrock adapter, Drizzle schema and SQL migrations, tests, and public assets.
-- `packages/mobile` and `packages/desktop`: managed workspace scaffolds, retained for the monorepo. The supported simulator is the web app.
-- `.env.template`, `bun.lock`, and project configuration for a clean install.
-- `reference-samples/`: the original Python attachments, for reference only; not needed to run the web app.
+| Layer | Technology | Location |
+| --- | --- | --- |
+| Web UI | React, TypeScript, Tailwind CSS, Vite | `packages/web/src/web` |
+| API | Hono, oRPC, Zod | `packages/web/src/api` |
+| Policy and agent integration | Deterministic rules, AWS Bedrock SDK | `packages/web/src/api/services` |
+| Persistence | Drizzle, SQLite / Turso | `packages/web/src/api/database`, `packages/web/drizzle` |
+| Behavior checks | Bun tests, mocked Bedrock runtime | `packages/web/tests` |
+| Optional scaffolds | Expo, Electron | `packages/mobile`, `packages/desktop` |
 
-The archive excludes credentials, databases, dependency folders, caches, and generated build output.
+The UI submits a proposal to the API. Demo mode parses a complete fictional request; Bedrock mode returns a structured action to the server. The policy engine evaluates the proposal, and the API persists the resulting chat and audit records. Neither path executes a payment.
+
+`reference-samples/` contains the original Python examples for context only; the web app does not require them. `.env.template` documents server configuration. Git excludes credentials, local databases, dependency folders, caches, and generated build output.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, validation, and pull request guidelines. Use the [issue templates](https://github.com/ssabat/transferguard/issues/new/choose) for reproducible bugs and focused feature requests.
+
+## Security
+
+Never submit real banking details, personal data, or AWS credentials in the simulator or GitHub issues. See [SECURITY.md](SECURITY.md) for private vulnerability reporting and the project's security boundaries.
+
+## License
+
+No project license has been selected. Public source visibility does not grant a general license to use, modify, or redistribute this code. Third-party dependencies retain their respective licenses.
